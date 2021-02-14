@@ -60,7 +60,7 @@ router.post('/blogs', [
     body('title', 'Title cannot be empty.').trim().isLength({ min: 1 }).escape(),
     body('body', 'Blog body cannot be empty.').trim().isLength({ min: 1 }).escape(),
     (req, res, next) => {
-        if (req.user === null) {
+        if (req.user === null || req.user.admin === false) {
             res.status = 401;
             return res.send('Unauthorized');
         }
@@ -107,7 +107,7 @@ router.put('/blogs/:id', [
     body('body', 'Body cannot be empty.').trim().isLength({ min: 1 }).escape(),
     (req, res, next) =>{
 
-    if (req.user === null) {
+    if (req.user === null || req.user.admin === false) {
         res.status = 401;
         return res.send('Unauthorized')
     } else {
@@ -120,7 +120,7 @@ router.put('/blogs/:id', [
 
 //delete one blog
 router.delete('/blogs/:id', function (req, res, next) {
-    if (req.user === null) {
+    if (req.user === null || req.user.admin === false) {
         res.status = 401;
         return res.send('Unauthorized.');
     }
