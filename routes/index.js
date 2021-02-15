@@ -36,9 +36,7 @@ router.post('/user', [
                     })
                     return;
                 } else {
-                    res.json({
-                        user
-                    })
+                    res.send('User saved successfully.')
                 }
             })
         }
@@ -47,7 +45,7 @@ router.post('/user', [
 
 //get list of blogs
 router.get('/blogs', function (req, res, next) {
-    Blog.find().sort({ datePosted: 'descending' }).populate('postedBy', 'firstName lastName').exec((err, results) => {
+    Blog.find().sort({ datePosted: 'descending' }).populate('postedBy', 'firstName lastName').populate({path: 'comments', populate: { path: 'postedBy', select: 'firstName lastName', model: 'User' }}).exec((err, results) => {
         if (err) { return next(err); }
         res.json({
             blogPosts: results
@@ -68,7 +66,7 @@ router.post('/blogs', [
         const post = new Blog({
             title: req.body.title,
             body: req.body.body,
-            draft: (req.body.draft || false),
+            draft: (req.body.draft || true),
             datePosted: new Date(),
             postedBy: req.user._id
         })
@@ -111,9 +109,13 @@ router.put('/blogs/:id', [
         res.status = 401;
         return res.send('Unauthorized')
     } else {
-    Blog.findByIdAndUpdate({_id: req.params.id }, { title: req.body.title, body: req.body.body }).exec(function(err, result) {
+    Blog.findByIdAndUpdate({_id: req.params.id }, { title: req.body.title, body: req.body.body }, { new: true }).exec(function(err, blogPost) {
         if (err) { return res.send('Blog update failed.'); }
-        res.send('Blog post updated.')
+        else {
+            res.json({
+                blogPost
+            })
+        }
     })}}
 
 ]);
@@ -135,16 +137,73 @@ router.delete('/blogs/:id', function (req, res, next) {
 
 //get comments for specific blog post
 router.get('/blogs/:id/comments', function (req, res, next) {
+    Comment.find({ post: req.params.id }).populate('postedBy', 'firstName lastName').sort({ datePosted: 'descending' }).exec(function (err, results) {
+        if (err) {
+            return res.send('Error getting comments');
+        } else {
+            res.json({
+                comments: results
+            })
+        }
+    })
 
 });
 
 // add comment to blog post
-router.post('/blogs/:id/comments', function (req, res, next) {
-
-});
+router.post('/blogs/:id/comments', [
+    body('body', 'Comment cannot be empty.').trim().isLength({ min: 1 }).escape(),
+    (req, res, next) => {
+        if (req.user === null) {
+            return res.send('Must be logged in to comment.');
+        }
+        const errors = validationResult(req);
+        const comment = new Comment({
+            postedBy: req.user._id,
+            body: req.body.body,
+            datePosted: new Date(),
+            post: req.params.id
+        });
+        if (!errors.isEmpty()) {
+            return res.json({
+                errors: errors.array()
+            })
+        } else {
+            comment.save(function(err, comment) {
+                if (err) {
+                    return res.send('Error while saving comment.');
+                } else {
+                    Blog.findByIdAndUpdate({_id: req.params.id}, { $push: { comments: comment } }, { new: true }, function (err, blogPost) {
+                        if (err) { return res.send('Error while saving comment.'); }
+                        else {
+                            res.json({
+                                blogPost
+                            })
+                        }
+                    })
+                }
+            })
+        }
+    }
+]);
 
 //Delete specific comment
 router.delete('/blogs/:id/comments/:commentId', function (req, res, next) {
+    if (req.user === null || req.user.admin === false) {
+        return res.send('Not authorized.')
+    } else {
+        Comment.findByIdAndRemove(req.params.commentId).exec(function (err, comment) {
+            Blog.findByIdAndUpdate({ _id: req.params.id }, { $pull: { comments: req.params.commentId }}, { new: true }, function (err, blogPost) {
+                if (err) {
+                    return res.send('Error deleting comment.');
+                }
+                else {
+                    res.json({
+                        blogPost
+                    })
+                }
+            })
+        })
+    }
 
 });
 
