@@ -45,12 +45,23 @@ router.post('/user', [
 
 //get list of blogs
 router.get('/blogs', function (req, res, next) {
+
+    if (req.user === null || req.user.admin === false) {
+        Blog.find({ draft: false }).sort({ datePosted: 'descending' }).populate('postedBy', 'firstName lastName').populate({path: 'comments', populate: { path: 'postedBy', select: 'firstName lastName', model: 'User' }}).exec((err, results) => {
+            if (err) { return next(err); }
+            res.json({
+                blogPosts: results
+            })
+        })
+    }
+    else if (req.user.admin === true) {
     Blog.find().sort({ datePosted: 'descending' }).populate('postedBy', 'firstName lastName').populate({path: 'comments', populate: { path: 'postedBy', select: 'firstName lastName', model: 'User' }}).exec((err, results) => {
         if (err) { return next(err); }
         res.json({
             blogPosts: results
         })
     })
+    }
 });
 
 //post new blog (really, add to list of blogs)
